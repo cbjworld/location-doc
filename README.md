@@ -21,7 +21,7 @@ CLI로 배포하려면: `npm i -g vercel && vercel --prod`
 - Hobby 플랜은 상업적 용도 불가 약관이 있습니다. 업무용이면 Pro 플랜을 확인하세요.
 
 ## 구조
-- `api/index.py` : Flask 앱(/, /geocode, /generate)
+- `app.py` : Flask 앱(/, /geocode, /generate)
 - `hwpx_generator.py`, `template/` : hwpx 조립
 - `templates/index.html` : 화면
-- `vercel.json` : 모든 경로를 Flask로 연결, template 폴더 포함
+- Vercel이 루트의 app.py(Flask)를 자동 인식합니다(별도 설정 없음).

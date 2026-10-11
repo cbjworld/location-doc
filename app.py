@@ -11,7 +11,7 @@ from PIL import Image
 
 import hwpx_generator
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 KAKAO_JS_KEY = os.environ.get("KAKAO_JS_KEY", "")
 KAKAO_REST_KEY = os.environ.get("KAKAO_REST_KEY", "")
 
