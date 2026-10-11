@@ -101,7 +101,7 @@
     position: relative;
     width: 100%;
     max-width: 480px;
-    aspect-ratio: 963 / 688;
+    aspect-ratio: 47742 / 26077;
     overflow: hidden;
     border: 2px solid var(--primary);
     border-radius: 8px;
@@ -347,9 +347,9 @@ document.getElementById('radiusSlider').addEventListener('input', function (e) {
 });
 
 // ---------------------------------------------------------------------------
-// 사진 크롭 도구 (문서에 들어가는 표 비율 963:688에 맞춰 자르기)
+// 사진 크롭 도구 (문서에 들어가는 표 비율 약 1.83:1에 맞춰 자르기)
 // ---------------------------------------------------------------------------
-const CROP_ASPECT = 963 / 688;
+const CROP_ASPECT = 47742 / 26077;
 let cropImg = null;
 let cropScale = 1, cropMinScale = 1;
 let cropOffsetX = 0, cropOffsetY = 0;
