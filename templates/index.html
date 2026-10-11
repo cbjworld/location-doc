@@ -68,6 +68,20 @@
     font-size: 16px;
     font-weight: 700;
   }
+  #busyOverlay {
+    position: fixed; inset: 0; z-index: 9999;
+    display: none; align-items: center; justify-content: center; flex-direction: column; gap: 16px;
+    background: rgba(20, 24, 40, 0.55); color: #fff; font-size: 17px; font-weight: 600;
+    cursor: wait;
+  }
+  #busyOverlay.show { display: flex; }
+  #busyOverlay .spinner {
+    width: 54px; height: 54px; border-radius: 50%;
+    border: 6px solid rgba(255,255,255,0.3); border-top-color: #fff;
+    animation: busySpin 0.9s linear infinite;
+  }
+  #busyOverlay small { font-size: 13px; font-weight: 400; opacity: 0.85; }
+  @keyframes busySpin { to { transform: rotate(360deg); } }
   #status { margin-top: 12px; font-size: 14px; }
   #status.error { color: #c0392b; }
   #status.ok { color: #1e7e34; }
@@ -138,6 +152,8 @@
 </head>
 <body>
 <div id="toastContainer"></div>
+<div id="busyOverlay" role="alert" aria-live="assertive"><div class="spinner"></div><div>저장 중입니다...</div><small>잠시만 기다려주세요. 창을 닫거나 다시 누르지 마세요.</small></div>
+
 <div class="wrap">
   <h1>위치도 및 현장사진 자동생성</h1>
   <div class="sub">주소를 검색하고, 지도에서 정확한 지점을 원으로 표시한 뒤 현장사진을 올리면 hwpx 파일이 만들어집니다.</div>
@@ -549,7 +565,15 @@ function showToast(title, message, type = 'success') {
   }, life);
 }
 
+let isGenerating = false;
+function setBusy(on) {
+  isGenerating = on;
+  document.getElementById('busyOverlay').classList.toggle('show', on);
+  document.getElementById('generateBtn').disabled = on;
+}
+
 document.getElementById('generateBtn').addEventListener('click', async function () {
+  if (isGenerating) return;
   const statusEl = document.getElementById('status');
   statusEl.className = '';
   statusEl.textContent = '';
@@ -560,7 +584,8 @@ document.getElementById('generateBtn').addEventListener('click', async function 
   if (!circleOverlay) { showToast('입력 필요', '지도에 원을 표시해주세요.', 'error'); return; }
   if (!cropImg) { showToast('입력 필요', '현장사진을 선택해주세요.', 'error'); return; }
 
-  statusEl.textContent = '생성 중...';
+  statusEl.textContent = '';
+  setBusy(true);
 
   try {
     const center = map.getCenter();
@@ -628,6 +653,8 @@ document.getElementById('generateBtn').addEventListener('click', async function 
   } catch (e) {
     statusEl.textContent = '';
     showToast('오류 발생', e.message, 'error');
+  } finally {
+    setBusy(false);
   }
 });
 
