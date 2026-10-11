@@ -1,4 +1,71 @@
-# 위치도 및 현장사진 자동생성 (Vercel 웹 버전)
+![위치도 · 현장사진 프로젝트 표지](docs/cover.svg)
+
+# 위치도 · 현장사진 · Location Doc
+
+**지도 캡처와 사진 붙여넣기를, 한 번의 문서 생성으로.**
+
+주소를 검색하고 현장사진을 선택하면 위치도와 사진이 들어간 **HWPX 한글 문서**를 만듭니다. 현장 확인 자료와 보고서 첨부 문서를 준비할 때 사용할 수 있습니다.
+
+### [→ 웹앱 열기](https://location-doc.vercel.app)
+
+`Python` · `Flask` · `Pillow` · `Kakao Maps` · `HWPX`
+
+## 입력에서 문서까지
+
+| 입력 | 처리 | 결과 |
+| --- | --- | --- |
+| 주소 + 현장사진 | 지도 조회·위치 표시·이미지 배치 | 위치도 및 현장사진 `.hwpx` |
+
+- 주소 검색과 지도 위치 조정
+- 지도 위 표시 원을 포함한 위치도
+- 현장사진을 한글 서식에 배치
+- 주소를 포함한 파일명으로 다운로드
+
+## 사용 방법
+
+1. 주소를 검색하고 지도에서 대상 위치를 확인합니다.
+2. 지도 범위와 위치 표시를 조정합니다.
+3. 현장사진을 선택합니다.
+4. 문서를 생성해 내려받고 한글에서 내용과 배치를 확인합니다.
+
+## 로컬 실행
+
+```bash
+git clone https://github.com/cbjworld/location-doc.git
+cd location-doc
+python -m venv .venv
+```
+
+가상환경을 활성화하고 의존성을 설치합니다.
+
+```bash
+pip install -r requirements.txt
+```
+
+실행 환경에 `KAKAO_JS_KEY`와 `KAKAO_REST_KEY`를 설정한 뒤 실행합니다.
+
+```bash
+flask --app app run
+```
+
+`http://127.0.0.1:5000`에서 엽니다. 카카오 JavaScript 키의 허용 도메인에 실행 주소를 등록해야 합니다. REST 키는 서버 환경변수에만 보관하세요.
+
+## 구성
+
+| 파일 | 역할 |
+| --- | --- |
+| `app.py` | 웹 화면·주소 검색·문서 생성 API |
+| `hwpx_generator.py` | HWPX 문서 조립 |
+| `templates/index.html` | 주소·지도·사진 입력 화면 |
+| `template/` | 한글 문서 템플릿 |
+
+## 처리 방식과 제한
+
+**사진과 지도 이미지는 서버를 거쳐 처리됩니다.** 수합기와 달리 브라우저 안에서만 처리되는 도구가 아닙니다. 서버에서는 요청별 임시 폴더를 사용하며 처리가 끝나면 임시 파일을 정리합니다. 민감한 자료는 사용 환경의 보안 정책을 확인하세요.
+
+브라우저는 사진 크기를 줄여 전송하며, 서버의 요청 본문 한도는 4MB입니다. 지도 조회는 카카오 API 키와 이용 한도에 영향을 받습니다. 현재 코드에 별도의 사용자 인증은 없으므로 기관 내부 운영에는 접근 제어를 검토하세요.
+
+## 기존 배포 안내
 
 ## 배포 순서
 1. 이 폴더를 GitHub 저장소에 올립니다.
@@ -14,14 +81,9 @@
 
 CLI로 배포하려면: `npm i -g vercel && vercel --prod`
 
-## 주의
-- 접근 제한이 없습니다. 주소를 아는 누구나 사용할 수 있고 카카오 REST 호출 한도(무료 일일 쿼터)를 소진할 수 있습니다. 필요하면 나중에 비밀번호/사내 SSO를 붙이세요.
-- 업로드한 사진과 지도 이미지가 외부 클라우드(Vercel 서버)를 거쳐 처리됩니다(저장은 하지 않음). 민감한 현장 사진·공공 자료라면 보안 정책을 먼저 확인하세요.
-- Vercel 요청/응답 한도 4.5MB: 사진은 브라우저에서 1200px로 줄여 보내고, hwpx 안 이미지는 900px 폭으로 저장합니다.
-- Hobby 플랜은 상업적 용도 불가 약관이 있습니다. 업무용이면 Pro 플랜을 확인하세요.
 
-## 구조
-- `app.py` : Flask 앱(/, /geocode, /generate)
-- `hwpx_generator.py`, `template/` : hwpx 조립
-- `templates/index.html` : 화면
-- Vercel이 루트의 app.py(Flask)를 자동 인식합니다(별도 설정 없음).
+## 함께 개선해요
+
+유용했다면 **⭐ Star**로 응원해 주세요. [Issues](https://github.com/cbjworld/location-doc/issues)에 오류 재현 방법이나 개선 아이디어를 남겨주시면 도움이 됩니다. 예시 자료에서 개인정보와 비공개 데이터는 제거해 주세요.
+
+**English:** Generate a Korean HWPX document from an address, a marked map image and a site photo. Built with Flask and Pillow; images are processed on the server.
