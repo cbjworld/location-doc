@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<title>위치도 및 현장사진 자동생성</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={{ kakao_js_key }}&autoload=false"></script>
+<style>
+  :root {
+    --primary: #4472C4;
+    --primary-dark: #2f5597;
+    --bg: #f5f6f8;
+    --border: #d7dbe0;
+    --text: #222;
+    --muted: #767676;
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+    background: var(--bg);
+    margin: 0;
+    padding: 24px;
+    color: var(--text);
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 20px; font-size: 14px; }
+  .card {
+    background: white;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  label { font-weight: 600; font-size: 14px; display: block; margin-bottom: 6px; }
+  .row { display: flex; gap: 8px; margin-bottom: 12px; }
+  input[type=text] {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+  }
+  button {
+    padding: 10px 16px;
+    border: none;
+    border-radius: 6px;
+    background: var(--primary);
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--primary-dark); }
+  button.secondary {
+    background: white;
+    color: var(--primary);
+    border: 1px solid var(--primary);
+  }
+  button.secondary.active { background: var(--primary); color: white; }
+  #map { width: 100%; height: 420px; border-radius: 8px; border: 1px solid var(--border); }
+  .toolbar { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; align-items: center; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; }
+  .radius-control { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  input[type=file] { font-size: 14px; }
+  .generate-btn {
+    width: 100%;
+    padding: 14px;
+    font-size: 16px;
+    font-weight: 700;
+  }
+  #status { margin-top: 12px; font-size: 14px; }
+  #status.error { color: #c0392b; }
+  #status.ok { color: #1e7e34; }
+  .badge {
+    display: inline-block;
+    background: #eef2fb;
+    color: var(--primary-dark);
+    border-radius: 4px;
+    padding: 2px 8px;
+    font-size: 12px;
+    margin-left: 6px;
+  }
+
+  /* 사진 크롭 도구 */
+  #cropWrap { margin-top: 14px; }
+  #cropFrame {
+    position: relative;
+    width: 100%;
+    max-width: 480px;
+    aspect-ratio: 963 / 688;
+    overflow: hidden;
+    border: 2px solid var(--primary);
+    border-radius: 8px;
+    cursor: grab;
+    background: #eee;
+    touch-action: none;
+  }
+  #cropFrame.dragging { cursor: grabbing; }
+  #cropCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+  .zoom-row { display: flex; align-items: center; gap: 10px; margin-top: 10px; max-width: 480px; }
+  .zoom-row input[type=range] { flex: 1; }
+
+  /* 알약 스타일 토스트 알림 */
+  #toastContainer {
+    position: fixed;
+    bottom: 28px;
+    right: 28px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+  }
+  .toast {
+    min-width: 300px;
+    max-width: 380px;
+    background: #2b2f38;
+    color: #fff;
+    border-left: 5px solid var(--primary);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+    padding: 16px 18px;
+    font-size: 14px;
+    opacity: 0;
+    transform: translateX(50px);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .toast.show { opacity: 1; transform: translateX(0); }
+  .toast.success { border-left-color: #2ecc71; }
+  .toast.error { border-left-color: #e74c3c; }
+  .toast .toast-icon { font-size: 20px; line-height: 1; }
+  .toast .toast-title { font-weight: 700; margin-bottom: 3px; }
+  .toast .toast-msg { color: #d8dce3; font-size: 13px; line-height: 1.4; }
+</style>
+</head>
+<body>
+<div id="toastContainer"></div>
+<div class="wrap">
+  <h1>위치도 및 현장사진 자동생성</h1>
+  <div class="sub">주소를 검색하고, 지도에서 정확한 지점을 원으로 표시한 뒤 현장사진을 올리면 hwpx 파일이 만들어집니다.</div>
+
+  {% if not kakao_js_key %}
+  <div class="card" style="border-color:#c0392b; background:#fdecea;">
+    <b>⚠ 카카오맵 JS 키가 설정되지 않았습니다.</b><br/>
+    Vercel 환경변수 <code>KAKAO_JS_KEY</code>를 설정하고 다시 배포해주세요. (README 참고)
+  </div>
+  {% endif %}
+
+  <div class="card">
+    <label for="address">주소</label>
+    <div class="row">
+      <input type="text" id="address" placeholder="예: 녹사평대로 150" />
+      <button id="searchBtn">지도에서 찾기</button>
+    </div>
+
+    <div class="toolbar">
+      <button class="secondary" id="circleModeBtn">⭕ 원 그리기</button>
+      <button class="secondary" id="clearBtn">지우기</button>
+      <div class="radius-control" id="radiusControl" style="display:none;">
+        반경(m): <input type="range" id="radiusSlider" min="3" max="60" value="15" />
+        <span id="radiusValue">15</span>m
+      </div>
+    </div>
+
+    <div id="map"></div>
+    <div class="hint">
+      "원 그리기" 버튼을 누른 뒤 지도를 클릭한 채로 드래그하면, 누른 지점이 중심이 되고
+      드래그한 거리만큼 반경이 되는 원이 그려집니다 (그냥 클릭만 하면 아래 슬라이더에
+      설정된 반경으로 그려짐). 그려진 뒤에도 슬라이더로 미세 조정 가능합니다.
+      최종 문서에도 이 원이 그대로(실제 크기 그대로) 들어갑니다.
+    </div>
+  </div>
+
+  <div class="card">
+    <label for="photo">현장사진</label>
+    <input type="file" id="photo" accept="image/*" />
+    <div id="cropWrap" style="display:none;">
+      <div class="hint">
+        네모 안에 보이는 부분이 문서에 그대로 들어갑니다. 드래그해서 위치를 옮기고,
+        슬라이더로 확대/축소하세요.
+      </div>
+      <div id="cropFrame">
+        <canvas id="cropCanvas"></canvas>
+      </div>
+      <div class="zoom-row">
+        🔍 <input type="range" id="zoomSlider" min="100" max="300" value="100" />
+      </div>
+      <div class="toolbar" style="margin-top:10px; margin-bottom:0;">
+        <button class="secondary" id="photoCircleModeBtn">⭕ 사진에 원 표시 (선택)</button>
+        <button class="secondary" id="photoCircleClearBtn">지우기</button>
+      </div>
+    </div>
+  </div>
+
+  <button class="generate-btn" id="generateBtn">위치도 및 현장사진 hwpx 생성</button>
+  <div id="status"></div>
+</div>
+
+<script>
+let map, circleOverlay = null;
+let mode = null; // 'circle' | null
+let circleRadius = 15;
+let isDrawingCircle = false;
+let circleStartLatLng = null;
+
+function haversineMeters(a, b) {
+  const R = 6371000;
+  const toRad = (deg) => (deg * Math.PI) / 180;
+  const dLat = toRad(b.getLat() - a.getLat());
+  const dLng = toRad(b.getLng() - a.getLng());
+  const lat1 = toRad(a.getLat());
+  const lat2 = toRad(b.getLat());
+  const sinDLat = Math.sin(dLat / 2);
+  const sinDLng = Math.sin(dLng / 2);
+  const h = sinDLat * sinDLat + Math.cos(lat1) * Math.cos(lat2) * sinDLng * sinDLng;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+// 시작 좌표에서 bearingDeg 방향으로 distanceMeters만큼 떨어진 좌표를 계산 (haversine의 역연산)
+function destinationPoint(latlng, bearingDeg, distanceMeters) {
+  const R = 6371000;
+  const bearing = (bearingDeg * Math.PI) / 180;
+  const lat1 = (latlng.getLat() * Math.PI) / 180;
+  const lng1 = (latlng.getLng() * Math.PI) / 180;
+  const dr = distanceMeters / R;
+  const lat2 = Math.asin(
+    Math.sin(lat1) * Math.cos(dr) + Math.cos(lat1) * Math.sin(dr) * Math.cos(bearing)
+  );
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(dr) * Math.cos(lat1),
+      Math.cos(dr) - Math.sin(lat1) * Math.sin(lat2)
+    );
+  return new kakao.maps.LatLng((lat2 * 180) / Math.PI, (lng2 * 180) / Math.PI);
+}
+
+function initMap() {
+  const container = document.getElementById('map');
+  const options = {
+    center: new kakao.maps.LatLng(37.5326, 127.0047), // 기본값: 용산구 대략 중심
+    level: 2
+  };
+  map = new kakao.maps.Map(container, options);
+
+  // "원 그리기" 모드에서는 마우스를 누른 지점이 중심, 놓는 지점까지의 거리가 반경이 됩니다.
+  // (드래그하는 동안은 지도가 움직이지 않도록 잠깐 패닝을 꺼둡니다)
+  kakao.maps.event.addListener(map, 'mousedown', function (mouseEvent) {
+    if (mode !== 'circle') return;
+    isDrawingCircle = true;
+    circleStartLatLng = mouseEvent.latLng;
+    map.setDraggable(false);
+
+    if (circleOverlay) circleOverlay.setMap(null);
+    circleOverlay = new kakao.maps.Circle({
+      center: circleStartLatLng,
+      radius: circleRadius,
+      strokeWeight: 3,
+      strokeColor: '#FF0000',
+      strokeOpacity: 0.9,
+      fillOpacity: 0,
+      map: map
+    });
+  });
+
+  kakao.maps.event.addListener(map, 'mousemove', function (mouseEvent) {
+    if (!isDrawingCircle || !circleOverlay) return;
+    const dist = haversineMeters(circleStartLatLng, mouseEvent.latLng);
+    // 그냥 클릭(거의 안 움직임)이면 슬라이더에 설정된 반경을 그대로 쓰고,
+    // 실제로 드래그하면 그 거리만큼 반경으로 반영합니다 (3~60m 범위로 제한).
+    if (dist >= 3) {
+      circleRadius = Math.min(60, Math.round(dist));
+      circleOverlay.setRadius(circleRadius);
+      document.getElementById('radiusSlider').value = circleRadius;
+      document.getElementById('radiusValue').textContent = circleRadius;
+    }
+  });
+
+  kakao.maps.event.addListener(map, 'mouseup', function () {
+    if (!isDrawingCircle) return;
+    isDrawingCircle = false;
+    map.setDraggable(true);
+  });
+}
+
+async function searchAddress() {
+  const address = document.getElementById('address').value.trim();
+  if (!address) { alert('주소를 입력해주세요.'); return; }
+
+  // 주소 검색은 브라우저가 카카오에 직접 묻지 않고, 우리 서버(/geocode)를 통해 처리합니다.
+  try {
+    const resp = await fetch('/geocode?query=' + encodeURIComponent(address));
+    const data = await resp.json();
+    if (!resp.ok) {
+      alert(data.error || '주소를 찾지 못했습니다. 다른 표기로 다시 시도해주세요.');
+      return;
+    }
+    const coords = new kakao.maps.LatLng(data.lat, data.lng);
+    map.setCenter(coords);
+    map.setLevel(2);
+  } catch (e) {
+    alert('주소 검색 중 오류가 발생했습니다: ' + e.message);
+  }
+}
+
+document.getElementById('searchBtn').addEventListener('click', searchAddress);
+document.getElementById('address').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    searchAddress();
+  }
+});
+
+function setMode(newMode) {
+  mode = (mode === newMode) ? null : newMode;
+  document.getElementById('circleModeBtn').classList.toggle('active', mode === 'circle');
+  document.getElementById('radiusControl').style.display = (mode === 'circle') ? 'flex' : 'none';
+}
+
+document.getElementById('circleModeBtn').addEventListener('click', () => setMode('circle'));
+document.getElementById('clearBtn').addEventListener('click', function () {
+  if (circleOverlay) { circleOverlay.setMap(null); circleOverlay = null; }
+});
+document.getElementById('radiusSlider').addEventListener('input', function (e) {
+  circleRadius = parseInt(e.target.value, 10);
+  document.getElementById('radiusValue').textContent = circleRadius;
+  if (circleOverlay) circleOverlay.setRadius(circleRadius);
+});
+
+// ---------------------------------------------------------------------------
+// 사진 크롭 도구 (문서에 들어가는 표 비율 963:688에 맞춰 자르기)
+// ---------------------------------------------------------------------------
+const CROP_ASPECT = 963 / 688;
+let cropImg = null;
+let cropScale = 1, cropMinScale = 1;
+let cropOffsetX = 0, cropOffsetY = 0;
+let cropDragging = false, cropDragStartX = 0, cropDragStartY = 0;
+let cropOffsetStartX = 0, cropOffsetStartY = 0;
+
+// 사진 위 원 표시 (선택 사항)
+let photoCircleMode = false;
+let photoCircle = null; // { x, y, r } - cropCanvas 내부 픽셀 좌표 기준
+let photoCircleDrawing = false;
+let photoCircleStart = null;
+
+const cropCanvas = document.getElementById('cropCanvas');
+const cropCtx = cropCanvas.getContext('2d');
+const cropFrame = document.getElementById('cropFrame');
+
+function resizeCropCanvas() {
+  // CSS 크기(반응형)에 맞춰 캔버스의 실제 픽셀 해상도를 갱신
+  const rect = cropFrame.getBoundingClientRect();
+  cropCanvas.width = Math.round(rect.width);
+  cropCanvas.height = Math.round(rect.height);
+}
+
+function clampCropOffset() {
+  const w = cropImg.width * cropScale;
+  const h = cropImg.height * cropScale;
+  const minX = cropCanvas.width - w;
+  const minY = cropCanvas.height - h;
+  cropOffsetX = Math.min(0, Math.max(minX, cropOffsetX));
+  cropOffsetY = Math.min(0, Math.max(minY, cropOffsetY));
+}
+
+function drawCrop() {
+  if (!cropImg) return;
+  cropCtx.clearRect(0, 0, cropCanvas.width, cropCanvas.height);
+  cropCtx.drawImage(
+    cropImg, 0, 0, cropImg.width, cropImg.height,
+    cropOffsetX, cropOffsetY, cropImg.width * cropScale, cropImg.height * cropScale
+  );
+  if (photoCircle) {
+    cropCtx.beginPath();
+    cropCtx.arc(photoCircle.x, photoCircle.y, photoCircle.r, 0, Math.PI * 2);
+    cropCtx.lineWidth = 4;
+    cropCtx.strokeStyle = '#FF0000';
+    cropCtx.stroke();
+  }
+}
+
+// 마우스 클라이언트 좌표를 cropCanvas 내부 픽셀 좌표로 변환
+// (CSS로 표시되는 크기와 캔버스의 실제 내부 해상도가 다를 수 있어서 비율 보정)
+function frameToCanvasCoords(clientX, clientY) {
+  const rect = cropFrame.getBoundingClientRect();
+  const scaleX = cropCanvas.width / rect.width;
+  const scaleY = cropCanvas.height / rect.height;
+  return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+}
+
+function loadCropImage(file) {
+  photoCircle = null;
+  photoCircleMode = false;
+  const btn = document.getElementById('photoCircleModeBtn');
+  if (btn) btn.classList.remove('active');
+  const reader = new FileReader();
+  reader.onload = function (e) {
+    const img = new Image();
+    img.onload = function () {
+      cropImg = img;
+      document.getElementById('cropWrap').style.display = 'block';
+      resizeCropCanvas();
+      // 프레임을 꽉 채우도록(cover) 기본 배율 계산
+      cropMinScale = Math.max(cropCanvas.width / img.width, cropCanvas.height / img.height);
+      cropScale = cropMinScale;
+      cropOffsetX = (cropCanvas.width - img.width * cropScale) / 2;
+      cropOffsetY = (cropCanvas.height - img.height * cropScale) / 2;
+      document.getElementById('zoomSlider').value = 100;
+      clampCropOffset();
+      drawCrop();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+document.getElementById('photo').addEventListener('change', function (e) {
+  if (e.target.files[0]) loadCropImage(e.target.files[0]);
+});
+
+document.getElementById('zoomSlider').addEventListener('input', function (e) {
+  if (!cropImg) return;
+  const pct = parseInt(e.target.value, 10);
+  // 확대 중심을 프레임 정중앙으로 유지
+  const cx = cropCanvas.width / 2, cy = cropCanvas.height / 2;
+  const imgX = (cx - cropOffsetX) / cropScale;
+  const imgY = (cy - cropOffsetY) / cropScale;
+  cropScale = cropMinScale * (pct / 100);
+  cropOffsetX = cx - imgX * cropScale;
+  cropOffsetY = cy - imgY * cropScale;
+  clampCropOffset();
+  drawCrop();
+});
+
+function cropPointerDown(clientX, clientY) {
+  if (!cropImg) return;
+  if (photoCircleMode) {
+    const pt = frameToCanvasCoords(clientX, clientY);
+    photoCircleDrawing = true;
+    photoCircleStart = pt;
+    photoCircle = { x: pt.x, y: pt.y, r: 20 };
+    drawCrop();
+    return;
+  }
+  cropDragging = true;
+  cropFrame.classList.add('dragging');
+  cropDragStartX = clientX;
+  cropDragStartY = clientY;
+  cropOffsetStartX = cropOffsetX;
+  cropOffsetStartY = cropOffsetY;
+}
+function cropPointerMove(clientX, clientY) {
+  if (photoCircleDrawing) {
+    const pt = frameToCanvasCoords(clientX, clientY);
+    const dist = Math.hypot(pt.x - photoCircleStart.x, pt.y - photoCircleStart.y);
+    photoCircle.r = Math.max(10, dist);
+    drawCrop();
+    return;
+  }
+  if (!cropDragging) return;
+  cropOffsetX = cropOffsetStartX + (clientX - cropDragStartX);
+  cropOffsetY = cropOffsetStartY + (clientY - cropDragStartY);
+  clampCropOffset();
+  drawCrop();
+}
+function cropPointerUp() {
+  if (photoCircleDrawing) { photoCircleDrawing = false; return; }
+  cropDragging = false;
+  cropFrame.classList.remove('dragging');
+}
+
+document.getElementById('photoCircleModeBtn').addEventListener('click', function () {
+  photoCircleMode = !photoCircleMode;
+  this.classList.toggle('active', photoCircleMode);
+  cropFrame.style.cursor = photoCircleMode ? 'crosshair' : 'grab';
+});
+document.getElementById('photoCircleClearBtn').addEventListener('click', function () {
+  photoCircle = null;
+  drawCrop();
+});
+
+cropFrame.addEventListener('mousedown', (e) => cropPointerDown(e.clientX, e.clientY));
+window.addEventListener('mousemove', (e) => cropPointerMove(e.clientX, e.clientY));
+window.addEventListener('mouseup', cropPointerUp);
+cropFrame.addEventListener('touchstart', (e) => {
+  const t = e.touches[0]; cropPointerDown(t.clientX, t.clientY);
+}, { passive: true });
+cropFrame.addEventListener('touchmove', (e) => {
+  const t = e.touches[0]; cropPointerMove(t.clientX, t.clientY);
+}, { passive: true });
+cropFrame.addEventListener('touchend', cropPointerUp);
+
+window.addEventListener('resize', function () {
+  if (!cropImg) return;
+  resizeCropCanvas();
+  cropMinScale = Math.max(cropCanvas.width / cropImg.width, cropCanvas.height / cropImg.height);
+  cropScale = Math.max(cropScale, cropMinScale);
+  clampCropOffset();
+  drawCrop();
+});
+
+function getCroppedBlob() {
+  return new Promise((resolve) => {
+    if (!cropImg) { resolve(null); return; }
+    // 화면 캔버스와 별개로, 실제 파일로 내보낼 고해상도 캔버스에 동일한 크롭을 다시 그림
+    const OUT_W = 1200;
+    const OUT_H = Math.round(OUT_W / CROP_ASPECT);
+    const scaleUp = OUT_W / cropCanvas.width;
+    const out = document.createElement('canvas');
+    out.width = OUT_W; out.height = OUT_H;
+    const octx = out.getContext('2d');
+    octx.drawImage(
+      cropImg, 0, 0, cropImg.width, cropImg.height,
+      cropOffsetX * scaleUp, cropOffsetY * scaleUp,
+      cropImg.width * cropScale * scaleUp, cropImg.height * cropScale * scaleUp
+    );
+    if (photoCircle) {
+      octx.beginPath();
+      octx.arc(photoCircle.x * scaleUp, photoCircle.y * scaleUp, photoCircle.r * scaleUp, 0, Math.PI * 2);
+      octx.lineWidth = 4 * scaleUp;
+      octx.strokeStyle = '#FF0000';
+      octx.stroke();
+    }
+    out.toBlob((blob) => resolve(blob), 'image/jpeg', 0.88);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// 알약 스타일 토스트 알림
+// ---------------------------------------------------------------------------
+function showToast(title, message, type = 'success') {
+  const container = document.getElementById('toastContainer');
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  const icon = type === 'success' ? '✅' : '⚠️';
+  el.innerHTML =
+    '<div class="toast-icon">' + icon + '</div>' +
+    '<div><div class="toast-title">' + title + '</div>' +
+    '<div class="toast-msg">' + message + '</div></div>';
+  container.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  const life = type === 'error' ? 6000 : 4000;
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 300);
+  }, life);
+}
+
+document.getElementById('generateBtn').addEventListener('click', async function () {
+  const statusEl = document.getElementById('status');
+  statusEl.className = '';
+  statusEl.textContent = '';
+
+  const address = document.getElementById('address').value.trim();
+
+  if (!address) { showToast('입력 필요', '주소를 입력해주세요.', 'error'); return; }
+  if (!circleOverlay) { showToast('입력 필요', '지도에 원을 표시해주세요.', 'error'); return; }
+  if (!cropImg) { showToast('입력 필요', '현장사진을 선택해주세요.', 'error'); return; }
+
+  statusEl.textContent = '생성 중...';
+
+  try {
+    const center = map.getCenter();
+    const level = map.getLevel();
+    const photoBlob = await getCroppedBlob();
+
+    // 지도 컨테이너의 실제 픽셀 크기 (이 크기 그대로 카카오 정적 지도를 요청함)
+    const mapRect = document.getElementById('map').getBoundingClientRect();
+    const mapWidth = Math.round(mapRect.width);
+    const mapHeight = Math.round(mapRect.height);
+
+    // 브라우저(카카오 SDK)가 실제로 계산한 화면 픽셀 좌표를 그대로 서버에 보낸다.
+    // 서버가 같은 크기(scale=1)로 정적 지도를 받으면, 이 좌표가 그 이미지 위에서도
+    // 정확히 같은 위치를 가리키게 된다. 반경도 같은 방식으로 픽셀 단위로 환산해서 보낸다.
+    const projection = map.getProjection();
+    const circlePos = circleOverlay.getPosition();
+    const edgePos = destinationPoint(circlePos, 0, circleRadius); // 북쪽으로 반경만큼 떨어진 지점
+    const centerPt = projection.containerPointFromCoords(circlePos);
+    const edgePt = projection.containerPointFromCoords(edgePos);
+    const radiusPx = Math.hypot(edgePt.x - centerPt.x, edgePt.y - centerPt.y);
+
+    const formData = new FormData();
+    formData.append('address', address);
+    formData.append('center_lat', center.getLat());
+    formData.append('center_lng', center.getLng());
+    formData.append('level', level);
+    formData.append('map_width', mapWidth);
+    formData.append('map_height', mapHeight);
+    formData.append('circle_px_x', centerPt.x);
+    formData.append('circle_px_y', centerPt.y);
+    formData.append('circle_radius_px', radiusPx);
+    formData.append('photo', photoBlob, 'photo.jpg');
+
+    const resp = await fetch('/generate', { method: 'POST', body: formData });
+
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ error: '알 수 없는 오류' }));
+      statusEl.textContent = '';
+      showToast('생성 실패', err.error || '생성에 실패했습니다.', 'error');
+      return;
+    }
+
+    const blob = await resp.blob();
+    const disposition = resp.headers.get('Content-Disposition') || '';
+    let filename = '위치도 및 현장사진.hwpx';
+    // filename*=UTF-8''... (RFC 5987, 한글이 정확히 인코딩된 부분)을 우선적으로 찾는다.
+    // 이걸 먼저 확인하지 않으면 그 앞에 나오는 영문 fallback(filename="...")이 먼저
+    // 매칭되어 한글 파일명이 깨지는 문제가 있었음.
+    const utf8Match = disposition.match(/filename\*=UTF-8''([^;]+)/i);
+    if (utf8Match) {
+      filename = decodeURIComponent(utf8Match[1]);
+    } else {
+      const asciiMatch = disposition.match(/filename="?([^";]+)"?/i);
+      if (asciiMatch) filename = asciiMatch[1];
+    }
+
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    window.URL.revokeObjectURL(url);
+
+    statusEl.textContent = '';
+    showToast('생성 완료', filename + ' 파일이 다운로드되었습니다.', 'success');
+  } catch (e) {
+    statusEl.textContent = '';
+    showToast('오류 발생', e.message, 'error');
+  }
+});
+
+function showLoadError(msg) {
+  const div = document.createElement('div');
+  div.className = 'card';
+  div.style.borderColor = '#c0392b';
+  div.style.background = '#fdecea';
+  div.innerHTML = '<b>⚠ 지도를 불러오지 못했습니다.</b><br/>' + msg;
+  document.querySelector('.wrap').insertBefore(div, document.querySelector('.card'));
+}
+
+if (typeof kakao === 'undefined') {
+  showLoadError(
+    '카카오 지도 스크립트 자체가 로드되지 않았습니다. 아래를 확인해주세요.<br/>' +
+    '① Vercel 환경변수 KAKAO_JS_KEY가 설정돼 있는지<br/>' +
+    '② 카카오디벨로퍼스에 이 사이트 주소(https://○○.vercel.app)가 JavaScript SDK 도메인으로 정확히 등록됐는지<br/>' +
+    '③ 사내망에서 dapi.kakao.com 접속이 막혀있지 않은지 (주소창에 직접 입력해서 확인)'
+  );
+} else {
+  try {
+    kakao.maps.load(initMap);
+  } catch (e) {
+    showLoadError('지도 초기화 중 오류: ' + e.message);
+  }
+}
+
+</script>
+</body>
+</html>
